@@ -1,0 +1,8 @@
+venv/
+__pycache__/
+*.pyc
+.env
+.git
+.gitignore
+bot_status.json
+trade_history.csv

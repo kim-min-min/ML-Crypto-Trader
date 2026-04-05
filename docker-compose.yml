@@ -1,0 +1,39 @@
+# 클라우드 배포용 docker-compose.yml
+volumes:
+  shared_data:
+
+services:
+  # 1. 백엔드 API (FastAPI)
+  api:
+    image: kaner0529/quant-backend:latest
+    container_name: cyber_trader_api
+    # 💡 8000번 포트 유지 + 프록시 헤더 옵션 추가
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips="*"
+    volumes:
+      - shared_data:/app
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: always
+
+  # 2. 매매 봇 (Python Bot)
+  bot:
+    image: kaner0529/quant-backend:latest  # API와 동일한 백엔드 이미지 사용
+    container_name: cyber_trader_bot
+    command: python trading_bot.py
+    volumes:
+      - shared_data:/app
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: always
+    depends_on:
+      - api
+
+  # 3. 프론트엔드 (React + Nginx)
+  frontend:
+    image: kaner0529/quant-frontend:latest
+    container_name: cyber_trader_web
+    ports:
+      - "80:80"  # 💡 3000번 대신 인터넷 기본 포트인 80번 개방!
+    restart: always
+    depends_on:
+      - api

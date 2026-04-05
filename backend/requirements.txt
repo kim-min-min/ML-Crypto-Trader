@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+httpx
+aiofiles
+ccxt
+pandas
+lightgbm
+joblib
+scikit-learn
+python-dotenv
+pandas-ta
