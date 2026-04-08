@@ -28,5 +28,5 @@ yarn-error.log*
 
 # --- [데이터 및 로그] ---
 *.csv
+*.pkl
 backend/bot_status.json
-backend/data/

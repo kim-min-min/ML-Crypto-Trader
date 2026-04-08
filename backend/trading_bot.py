@@ -27,7 +27,7 @@ def log_trade(side, amount, price, pnl=0):
 
 def run_bot():
     bot = BybitHelper()
-    ai = TradingStrategy('trading_model_5m_multi.pkl')
+    ai = TradingStrategy('trading_model_1m_binary.pkl')
     bot.set_leverage()
 
     highest_profit = 0
@@ -37,18 +37,20 @@ def run_bot():
 
     while True:
         try:
-            # 1. 잔고 및 포지션 정보 한 번에 가져오기 (API 호출 최적화)
+            # 1. 잔고 및 포지션 정보 한 번에 가져오기
             current_balance = bot.get_balance()
             pos = bot.get_position_details() 
             curr_pnl = pos['pnl_pct']
             
-            # 2. AI 예측
-            pred_long, pred_short, _ = ai.predict_proba(bot)
+            # 2. [수정됨] AI 예측 (바이너리라 확률이 2개만 나옴)
+            probs = ai.predict_proba(bot)
+            pred_short = probs[0]
+            pred_long = probs[1]
             
             now_dt = datetime.now()
             now_str = now_dt.strftime('%H:%M:%S')
 
-            # 3. 리액트 공유용 JSON 데이터 조립
+            # 3. 리액트 공유용 JSON 데이터 조립 (이건 그대로 둬도 됨)
             status_data = {
                 "balance": float(current_balance),
                 "side": pos['side'] if pos['side'] else "IDLE",
@@ -62,57 +64,61 @@ def run_bot():
                 "timestamp": now_dt.strftime('%Y-%m-%d %H:%M:%S')
             }
             
-            
             with open('bot_status.json', 'w') as f:
                 json.dump(status_data, f)
             
             print(f"[{now_str}] 잔고: {current_balance} | 롱: {pred_long:.3f} | 숏: {pred_short:.3f} - 분석 중...")
 
             # ---------------------------------------------------------
-            # 4. 매매 로직 (CSV 저장 추가)
+            # 4. 매매 로직 
             # ---------------------------------------------------------
             if pos['size'] == 0:
                 highest_profit = 0
                 is_trailing = False
                 
-                if pred_long >= config.ENTRY_THRESHOLD:
+                if pred_long >= config.LONG_THRESHOLD:
                     amt = bot.calculate_amount(current_balance)
-                    res = bot.execute_order('buy', 1, amt) # 롱 진입
-                    if res: # ⭐ 주문 성공 시 기록
-                        # res.get('average')는 실제 체결가입니다.
+                    res = bot.execute_order('buy', 1, amt) 
+                    if res: 
                         log_trade('LONG_ENTRY', amt, res.get('average', 0))
                         print(f"[{now_str}] 🔥 LONG 진입 완료 & CSV 기록")
                     
-                elif pred_short >= config.ENTRY_THRESHOLD:
+                elif pred_short >= config.SHORT_THRESHOLD:
                     amt = bot.calculate_amount(current_balance)
-                    res = bot.execute_order('sell', 2, amt) # 숏 진입
-                    if res: # ⭐ 주문 성공 시 기록
+                    res = bot.execute_order('sell', 2, amt) 
+                    if res: 
                         log_trade('SHORT_ENTRY', amt, res.get('average', 0))
                         print(f"[{now_str}] 📉 SHORT 진입 완료 & CSV 기록")
 
             else:
+                # 차트 기준 설정값에 레버리지를 곱해서 '실제 ROE 컷오프'로 변환
+                actual_stop_loss = config.STOP_LOSS * config.LEVERAGE
+                actual_trailing_start = config.TRAILING_START * config.LEVERAGE
+                actual_trailing_drop = config.TRAILING_DROP * config.LEVERAGE
+
                 # 강제 손절
-                if curr_pnl <= config.STOP_LOSS:
-                    res = bot.close_all_positions() # 모든 포지션 종료
+                if curr_pnl <= actual_stop_loss:
+                    res = bot.close_all_positions()
                     if res:
                         log_trade('LOSS_CUT', pos['size'], res.get('average', 0), pnl=curr_pnl)
-                        print(f"[{now_str}] 🛡️ 손절 완료 & CSV 기록")
+                        print(f"[{now_str}] 🛡️ 손절 완료 (ROE: {curr_pnl:.2f}%) & CSV 기록")
                     continue
 
                 if curr_pnl > highest_profit:
                     highest_profit = curr_pnl
 
-                if not is_trailing and curr_pnl >= config.TRAILING_START:
+                if not is_trailing and curr_pnl >= actual_trailing_start:
                     is_trailing = True
+                    print(f"[{now_str}] 🎯 트레일링 스탑 활성화! (현재 ROE: {curr_pnl:.2f}%)")
 
                 # 익절 실행 (트레일링 스탑)
                 if is_trailing:
                     drawdown = highest_profit - curr_pnl
-                    if drawdown >= config.TRAILING_DROP:
-                        res = bot.close_all_positions() # 모든 포지션 종료
+                    if drawdown >= actual_trailing_drop:
+                        res = bot.close_all_positions()
                         if res:
                             log_trade('TAKE_PROFIT', pos['size'], res.get('average', 0), pnl=curr_pnl)
-                            print(f"[{now_str}] 💎 익절 완료 & CSV 기록")
+                            print(f"[{now_str}] 💎 익절 완료 (ROE: {curr_pnl:.2f}%) & CSV 기록")
 
             time.sleep(10)
 
