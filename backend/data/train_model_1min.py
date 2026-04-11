@@ -19,8 +19,8 @@ features = [
 # 2. 이진 분류 타겟 라벨링 (롱: 1, 숏: 0) 
 # ==========================================
 FEE_RATE = 0.12 
-TAKE_PROFIT = 0.20  
-STOP_LOSS = -0.10  
+TAKE_PROFIT = 0.30  
+STOP_LOSS = -0.10
 
 # 일단 전부 버릴 쓰레기(-1)로 세팅
 df['target_class'] = -1 
@@ -80,8 +80,8 @@ prob_short = y_pred_prob[:, 0] # [수정됨] 0(숏)일 확률
 prob_long = y_pred_prob[:, 1]  # [수정됨] 1(롱)일 확률
 
 # [수정됨] 이진 분류니까 확실하게 60% 이상일 때만 진입하도록 컷오프 상향
-PROB_LONG_THRESHOLD = 0.56
-PROB_SHORT_THRESHOLD = 0.58 
+PROB_LONG_THRESHOLD = 0.60
+PROB_SHORT_THRESHOLD = 0.65
 
 long_idx = np.where(prob_long >= PROB_LONG_THRESHOLD)[0]
 short_idx = np.where(prob_short >= PROB_SHORT_THRESHOLD)[0]

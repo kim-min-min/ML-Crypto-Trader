@@ -30,8 +30,6 @@ def run_bot():
     ai = TradingStrategy('trading_model_1m_binary.pkl')
     bot.set_leverage()
 
-    highest_profit = 0
-    is_trailing = False
     
     print("🚀 CYBER-TRADER 엔진 가동!")
 
@@ -59,8 +57,6 @@ def run_bot():
                 "last_pnl": float(curr_pnl),
                 "pred_long": float(pred_long),
                 "pred_short": float(pred_short),
-                "highest_profit": float(highest_profit),
-                "is_trailing": bool(is_trailing),
                 "timestamp": now_dt.strftime('%Y-%m-%d %H:%M:%S')
             }
             
@@ -73,8 +69,6 @@ def run_bot():
             # 4. 매매 로직 
             # ---------------------------------------------------------
             if pos['size'] == 0:
-                highest_profit = 0
-                is_trailing = False
                 
                 if pred_long >= config.LONG_THRESHOLD:
                     amt = bot.calculate_amount(current_balance)
@@ -93,32 +87,23 @@ def run_bot():
             else:
                 # 차트 기준 설정값에 레버리지를 곱해서 '실제 ROE 컷오프'로 변환
                 actual_stop_loss = config.STOP_LOSS * config.LEVERAGE
-                actual_trailing_start = config.TRAILING_START * config.LEVERAGE
-                actual_trailing_drop = config.TRAILING_DROP * config.LEVERAGE
+                actual_take_profit = config.TAKE_PROFIT * config.LEVERAGE # 0.3 * 레버리지
 
-                # 강제 손절
+                # 1. 기계적 손절 (-0.1% * 레버리지)
                 if curr_pnl <= actual_stop_loss:
                     res = bot.close_all_positions()
                     if res:
                         log_trade('LOSS_CUT', pos['size'], res.get('average', 0), pnl=curr_pnl)
-                        print(f"[{now_str}] 🛡️ 손절 완료 (ROE: {curr_pnl:.2f}%) & CSV 기록")
+                        print(f"[{now_str}] 🛡️ 손절 완료 (ROE: {curr_pnl:.2f}%)")
                     continue
 
-                if curr_pnl > highest_profit:
-                    highest_profit = curr_pnl
-
-                if not is_trailing and curr_pnl >= actual_trailing_start:
-                    is_trailing = True
-                    print(f"[{now_str}] 🎯 트레일링 스탑 활성화! (현재 ROE: {curr_pnl:.2f}%)")
-
-                # 익절 실행 (트레일링 스탑)
-                if is_trailing:
-                    drawdown = highest_profit - curr_pnl
-                    if drawdown >= actual_trailing_drop:
-                        res = bot.close_all_positions()
-                        if res:
-                            log_trade('TAKE_PROFIT', pos['size'], res.get('average', 0), pnl=curr_pnl)
-                            print(f"[{now_str}] 💎 익절 완료 (ROE: {curr_pnl:.2f}%) & CSV 기록")
+                # 2. 기계적 익절 (0.3% * 레버리지)
+                elif curr_pnl >= actual_take_profit:
+                    res = bot.close_all_positions()
+                    if res:
+                        log_trade('TAKE_PROFIT', pos['size'], res.get('average', 0), pnl=curr_pnl)
+                        print(f"[{now_str}] 💎 익절 완료 (ROE: {curr_pnl:.2f}%)")
+                    continue
 
             time.sleep(10)
 
